@@ -30,6 +30,10 @@ Start from normalized `state/tools/action` records whenever possible. If the sou
 4. Launch Hermes-wrapped training.
    - Canonical runner:
      - `python hermes-skills/storyworld-conveyor/scripts/run_trm_trainer_hermes.py --config hermes-skills/storyworld-conveyor/sample_data/trm_trainer_hermes_safe.json`
+   - Bench menu:
+     - `python hermes-skills/pure-trm-trainer/scripts/run_trm_bench.py --bench routerbench`
+     - `python hermes-skills/pure-trm-trainer/scripts/run_trm_bench.py --bench primehub-envs`
+     - Add `--dry-run` to resolve the chosen bench config without launching.
    - Router bench runner:
      - `python hermes-skills/pure-trm-trainer/scripts/run_trm_routerbench.py`
      - Add `--dry-run` to resolve the portable bench config without launching.
@@ -41,6 +45,9 @@ Start from normalized `state/tools/action` records whenever possible. If the sou
      - `python hermes-skills/pure-trm-trainer/scripts/watch_trm_routerbench.py --run-dir <run_dir>`
      - Use this to monitor an already-running bench without relaunching it.
      - Add `--once` for a single snapshot render, or omit it to follow updates.
+   - Bench watcher alias:
+     - `python hermes-skills/pure-trm-trainer/scripts/watch_trm_bench.py --run-dir <run_dir>`
+     - Use this when you want a neutral name that matches the bench menu.
    - Hill-climb runner:
      - `python hermes-skills/pure-trm-trainer/scripts/run_trm_generalization_hillclimb.py --config <search-spec>.json`
    - Smoke wrapper:
@@ -161,8 +168,12 @@ Supported directly by the corpus builder:
 - Hill-climb search spec: [hillclimb-spec.sample.json](./references/hillclimb-spec.sample.json)
 - Hill-climb smoke spec: [hillclimb-spec.smoke.json](./references/hillclimb-spec.smoke.json)
 - Router bench spec: [routerbench-spec.json](./references/routerbench-spec.json)
+- PrimeHub envs bench spec: [primehub-envs-bench.json](./references/primehub-envs-bench.json)
+- Bench menu: [bench-menu.md](./references/bench-menu.md)
 - Router bench launcher: [run_trm_routerbench.py](./scripts/run_trm_routerbench.py)
+- Bench launcher: [run_trm_bench.py](./scripts/run_trm_bench.py)
 - Router bench watcher: [watch_trm_routerbench.py](./scripts/watch_trm_routerbench.py)
+- Bench watcher alias: [watch_trm_bench.py](./scripts/watch_trm_bench.py)
 - Router bench UI prompt: use `trm-routerBench` as the action name in Hermes.
 - Local scorecard evaluator: [evaluate_trm_scorecard.py](./scripts/evaluate_trm_scorecard.py)
 - Run telemetry standard: [run-telemetry.md](./references/run-telemetry.md)

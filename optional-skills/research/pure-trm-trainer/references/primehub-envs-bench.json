@@ -1,0 +1,26 @@
+{
+  "run_id": "trm_primehubEnvs",
+  "data_source": "primehub-reasoning-subset",
+  "anchor_set": {
+    "envs": [
+      "primehub-reasoning-subset"
+    ]
+  },
+  "mutations": [
+    {
+      "name": "primehub_reasoning_smoke",
+      "batch_size": 4,
+      "epochs": 1,
+      "lr": 0.0002,
+      "max_examples": 12
+    }
+  ],
+  "generalization_ladder": [
+    { "generalization_level": 1, "label": "light_generalization" },
+    { "generalization_level": 3, "label": "cross_env_family" }
+  ],
+  "plateau_patience": 1,
+  "maximize_key": "anchor_score",
+  "max_generalization_gap": 0.2,
+  "scorecard_relpath": "scorecard.json"
+}
