@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -85,6 +86,76 @@ def load_scorecard(path: Path | None) -> Dict[str, Any]:
     return read_json(path)
 
 
+def format_duration(seconds: float | None) -> str:
+    if seconds is None or seconds < 0:
+        return "estimating"
+    total = int(round(seconds))
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
+
+
+def format_progress_bar(completed: int, total: int, width: int = 18) -> str:
+    if total <= 0:
+        return "[" + ("-" * width) + "]"
+    filled = max(0, min(width, int(round((completed / total) * width))))
+    return "[" + ("#" * filled) + ("-" * (width - filled)) + "]"
+
+
+def normalize_ram_budget(raw: Any) -> str:
+    if raw in (None, "", 0, 0.0):
+        return "auto"
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return str(raw)
+    if value.is_integer():
+        return f"{int(value)} GB"
+    return f"{value:.1f} GB"
+
+
+def clip_text(value: Any, limit: int) -> str:
+    text = str(value)
+    if len(text) <= limit:
+        return text
+    if limit <= 3:
+        return text[:limit]
+    return text[: limit - 3] + "..."
+
+
+def render_status_card(snapshot: Dict[str, Any]) -> str:
+    width = 76
+    border = "+" + "-" * (width - 2) + "+"
+    current_metrics = clip_text(
+        f"anchor={snapshot['current_anchor']:.4f} train={snapshot['current_train']:.4f} gap={snapshot['current_gap']:.4f}",
+        56,
+    )
+    best_metrics = clip_text(
+        f"anchor={snapshot['best_anchor']:.4f} train={snapshot['best_train']:.4f} gap={snapshot['best_gap']:.4f}",
+        56,
+    )
+    lines = [
+        border,
+        f"| Hermes TRM Run: {clip_text(snapshot['run_id'], 56):<56}|",
+        f"| phase   : {clip_text(snapshot['phase'], 56):<56}|",
+        f"| step    : {clip_text(snapshot['step'], 56):<56}|",
+        f"| source  : {clip_text(snapshot['data_source'], 56):<56}|",
+        f"| RAM     : {clip_text(snapshot['ram_budget'], 56):<56}|",
+        f"| ETA     : {clip_text(snapshot['eta'], 56):<56}|",
+        f"| done    : {snapshot['progress_bar']} {snapshot['percent_complete']:>6.1f}%{'':<34}|",
+        f"| current : {current_metrics:<56}|",
+        f"| best    : {best_metrics:<56}|",
+        border,
+    ]
+    return "\n".join(lines)
+
+
+def write_progress_snapshot(path: Path, snapshot: Dict[str, Any]) -> None:
+    dump_json(path, snapshot)
+
+
 def write_default_scorecard(path: Path, trainer_run_dir: Path, summary_path: Path | None = None) -> Dict[str, Any]:
     summary: Dict[str, Any] = {}
     if summary_path is not None and summary_path.exists():
@@ -164,6 +235,56 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def build_status_snapshot(
+    *,
+    run_id: str,
+    phase: str,
+    step: str,
+    data_source: str,
+    ram_budget: Any,
+    completed_count: int,
+    total_candidates: int,
+    start_time: float,
+    completed_durations: List[float],
+    current_result: Dict[str, Any] | None,
+    best: Dict[str, Any] | None,
+) -> Dict[str, Any]:
+    elapsed = time.time() - start_time
+    eta_seconds = None
+    if completed_durations and total_candidates > completed_count:
+        avg = sum(completed_durations) / len(completed_durations)
+        eta_seconds = avg * (total_candidates - completed_count)
+    current_anchor = score_value(current_result or {}, "anchor_score", "judge_score")
+    current_train = score_value(current_result or {}, "train_score", "env_score")
+    current_gap = score_value(current_result or {}, "generalization_gap")
+    if not current_gap and current_result:
+        current_gap = max(0.0, current_train - current_anchor)
+    best_anchor = score_value(best or {}, "anchor_score", "judge_score")
+    best_train = score_value(best or {}, "train_score", "env_score")
+    best_gap = score_value(best or {}, "generalization_gap")
+    if not best_gap and best:
+        best_gap = max(0.0, best_train - best_anchor)
+    return {
+        "run_id": run_id,
+        "phase": phase,
+        "step": step,
+        "data_source": data_source,
+        "ram_budget": normalize_ram_budget(ram_budget),
+        "elapsed": format_duration(elapsed),
+        "eta": format_duration(eta_seconds),
+        "percent_complete": (completed_count / total_candidates * 100.0) if total_candidates else 0.0,
+        "progress_bar": format_progress_bar(completed_count, total_candidates),
+        "current_anchor": current_anchor,
+        "current_train": current_train,
+        "current_gap": current_gap,
+        "best_anchor": best_anchor,
+        "best_train": best_train,
+        "best_gap": best_gap,
+        "completed_count": completed_count,
+        "total_candidates": total_candidates,
+    }
+
+
 def main() -> int:
     args = parse_args()
     config_path = Path(args.config).resolve()
@@ -176,13 +297,7 @@ def main() -> int:
     ledger_path = run_dir / "hillclimb_ledger.jsonl"
     dump_json(run_dir / "run_config.snapshot.json", config)
 
-    template_root = Path(config["template_root"]).resolve()
-    trainer_script = Path(config.get("trainer_script") or (template_root / "run_trainer.ps1")).resolve()
-    base_trainer_config = Path(config.get("base_trainer_config") or (template_root / "trainer_config_safe.json")).resolve()
     corpus_spec = Path(config["corpus_spec"]).resolve()
-
-    base_cfg = read_json(base_trainer_config)
-    search_base = merge_dict(base_cfg, dict(config.get("trainer_overrides", {})))
     ladder = list(config.get("generalization_ladder") or default_ladder())
     mutation_templates = list(config.get("mutations") or [{}])
     anchor_set = dict(config.get("anchor_set", {}))
@@ -192,10 +307,48 @@ def main() -> int:
     plateau_patience = int(config.get("plateau_patience", 2) or 2)
     maximize_key = str(config.get("maximize_key") or "anchor_score")
     min_gap = float(config.get("max_generalization_gap", 0.0) or 0.0)
+    data_source = str(config.get("data_source") or Path(corpus_spec).name)
+    total_candidates = len(ladder) * max(1, len(mutation_templates))
+    run_started = time.time()
+    completed_durations: List[float] = []
+    progress_path = run_dir / "progress.snapshot.json"
+
+    if args.dry_run:
+        template_root = Path(config.get("template_root") or config_dir).resolve()
+        trainer_script = Path(config.get("trainer_script") or (template_root / "run_trainer.ps1")).resolve()
+        base_cfg: Dict[str, Any] = {}
+    else:
+        template_root = Path(config["template_root"]).resolve()
+        trainer_script = Path(config.get("trainer_script") or (template_root / "run_trainer.ps1")).resolve()
+        base_trainer_config = Path(config.get("base_trainer_config") or (template_root / "trainer_config_safe.json")).resolve()
+        base_cfg = read_json(base_trainer_config)
+
+    search_base = merge_dict(base_cfg, dict(config.get("trainer_overrides", {})))
+    memory_budget = (
+        config.get("memory_budget_gb")
+        or os.environ.get("TRM_MEMORY_GB")
+        or search_base.get("train", {}).get("memory_gb")
+        or search_base.get("runtime", {}).get("memory_gb")
+    )
 
     best: Dict[str, Any] | None = None
     plateau = 0
     candidate_index = 0
+    initial_status = build_status_snapshot(
+        run_id=run_id,
+        phase="planning",
+        step="queued",
+        data_source=data_source,
+        ram_budget=memory_budget,
+        completed_count=0,
+        total_candidates=total_candidates,
+        start_time=run_started,
+        completed_durations=completed_durations,
+        current_result=None,
+        best=None,
+    )
+    write_progress_snapshot(progress_path, initial_status)
+    print(render_status_card(initial_status), flush=True)
     for rung_index, rung in enumerate(ladder):
         for mutation in mutation_templates:
             candidate_index += 1
@@ -241,16 +394,47 @@ def main() -> int:
             }
             dump_json(candidate_dir / "command.json", command_record)
             append_jsonl(ledger_path, {"event": "candidate_planned", **command_record})
+            planned_status = build_status_snapshot(
+                run_id=run_id,
+                phase="launching",
+                step=f"candidate {candidate_index}/{total_candidates}",
+                data_source=data_source,
+                ram_budget=memory_budget,
+                completed_count=candidate_index - 1,
+                total_candidates=total_candidates,
+                start_time=run_started,
+                completed_durations=completed_durations,
+                current_result=None,
+                best=best,
+            )
+            write_progress_snapshot(progress_path, planned_status)
+            print(render_status_card(planned_status), flush=True)
 
             if args.dry_run:
                 continue
 
+            candidate_started_at = time.time()
             hermes_stdout = candidate_dir / "hermes.stdout.log"
             hermes_stderr = candidate_dir / "hermes.stderr.log"
             hermes_rc = run_command(hermes_cmd, template_root, hermes_stdout, hermes_stderr)
             hermes_status = "completed" if hermes_rc == 0 else "failed"
             dump_json(candidate_dir / "hermes.status.json", {"status": hermes_status, "returncode": hermes_rc, "at": now_iso()})
             append_jsonl(ledger_path, {"event": "candidate_hermes_finished", "status": hermes_status, "returncode": hermes_rc, "candidate_index": candidate_index})
+            hermes_finished_status = build_status_snapshot(
+                run_id=run_id,
+                phase="hermes_finished",
+                step=f"candidate {candidate_index}/{total_candidates}",
+                data_source=data_source,
+                ram_budget=memory_budget,
+                completed_count=candidate_index - 1,
+                total_candidates=total_candidates,
+                start_time=run_started,
+                completed_durations=completed_durations,
+                current_result=None,
+                best=best,
+            )
+            write_progress_snapshot(progress_path, hermes_finished_status)
+            print(render_status_card(hermes_finished_status), flush=True)
             if hermes_rc != 0:
                 continue
 
@@ -319,8 +503,24 @@ def main() -> int:
                 "scorecard": scorecard,
                 "trainer_run_dir": str(trainer_run_dir),
             }
+            completed_durations.append(time.time() - candidate_started_at)
             dump_json(candidate_dir / "result.json", result)
             append_jsonl(ledger_path, {"event": "candidate_scored", **result})
+            scored_status = build_status_snapshot(
+                run_id=run_id,
+                phase="scored",
+                step=f"candidate {candidate_index}/{total_candidates}",
+                data_source=data_source,
+                ram_budget=memory_budget,
+                completed_count=candidate_index,
+                total_candidates=total_candidates,
+                start_time=run_started,
+                completed_durations=completed_durations,
+                current_result=result,
+                best=best or result,
+            )
+            write_progress_snapshot(progress_path, scored_status)
+            print(render_status_card(scored_status), flush=True)
 
             if best is None:
                 best = result
@@ -349,8 +549,25 @@ def main() -> int:
         "evaluation_command": evaluation_command,
         "plateau_patience": plateau_patience,
         "maximize_key": maximize_key,
+        "memory_budget_gb": memory_budget,
+        "data_source": data_source,
     }
     dump_json(run_dir / "summary.json", final)
+    final_status = build_status_snapshot(
+        run_id=run_id,
+        phase="complete",
+        step=f"candidate {candidate_index}/{total_candidates}",
+        data_source=data_source,
+        ram_budget=memory_budget,
+        completed_count=min(candidate_index, total_candidates),
+        total_candidates=total_candidates,
+        start_time=run_started,
+        completed_durations=completed_durations,
+        current_result=best,
+        best=best,
+    )
+    write_progress_snapshot(progress_path, final_status)
+    print(render_status_card(final_status), flush=True)
     print(str(run_dir))
     print(str(run_dir / "summary.json"))
     return 0

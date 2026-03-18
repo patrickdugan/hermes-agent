@@ -50,6 +50,19 @@ Start from normalized `state/tools/action` records whenever possible. If the sou
    - Check final `summary.json`
    - For hill-climb runs, also check `hillclimb_ledger.jsonl` and each candidate `result.json`
 
+## Run Telemetry
+
+Research and training runs should emit a compact Hermes-style status card.
+
+- Show the current phase and candidate or step.
+- Show the corpus or data source in use.
+- Show the RAM budget or `auto` if the run does not know it yet.
+- Show ETA once at least one completed candidate can anchor an estimate.
+- Show percent complete and a short ASCII progress bar.
+- Show the current candidate metrics and the best-so-far metrics.
+- Keep the output short enough to tail in a terminal without scrolling noise.
+- Write the same snapshot into `progress.snapshot.json` so other tools can read it.
+
 ## Hill-Climbing Loop
 
 Use this when the user wants the best TRM bench score, not just a one-off trainer run.
@@ -95,6 +108,8 @@ Use this when the user wants the best TRM bench score, not just a one-off traine
 - Favor a model that survives harder held-out envs over one that only spikes on easy repeats.
 - Keep the final artifact set small and reproducible: corpus spec, resolved trainer config, run manifest, and summary.
 - If you have a separate evaluator, have it write a compact `scorecard.json` with `train_score`, `anchor_score`, `failure_rate`, and `recovery_rate`.
+- Emit a Hermes-style status card for training runs, with RAM, ETA, percent complete, data source, and a compact ASCII progress bar.
+- Keep the status contract consistent across research training skills.
 
 ## Corpus Rules
 
@@ -145,6 +160,7 @@ Supported directly by the corpus builder:
 - Router bench launcher: [run_trm_routerbench.py](./scripts/run_trm_routerbench.py)
 - Router bench UI prompt: use `trm-routerBench` as the action name in Hermes.
 - Local scorecard evaluator: [evaluate_trm_scorecard.py](./scripts/evaluate_trm_scorecard.py)
+- Run telemetry standard: [run-telemetry.md](./references/run-telemetry.md)
 
 ## Example Requests
 

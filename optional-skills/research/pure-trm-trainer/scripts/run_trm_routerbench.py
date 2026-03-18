@@ -36,6 +36,15 @@ def maybe_env(name: str) -> str | None:
     return value or None
 
 
+def parse_float(value: Any) -> float | None:
+    if value in (None, "", 0, 0.0):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the isolated TRM routerBench harness.")
     parser.add_argument("--config", default="", help="Optional routerbench JSON spec path.")
@@ -86,11 +95,13 @@ def main() -> int:
         "trainer_script": str(template_root / "run_trainer.ps1"),
         "base_trainer_config": str(template_root / "trainer_config_safe.json"),
         "corpus_spec": str(corpus_spec),
+        "data_source": str(spec.get("data_source") or Path(corpus_spec).name),
         "evaluator_script": str(skill_root / "scripts" / "evaluate_trm_scorecard.py"),
         "scorecard_relpath": str(spec.get("scorecard_relpath") or "scorecard.json"),
         "plateau_patience": int(spec.get("plateau_patience", 1) or 1),
         "maximize_key": str(spec.get("maximize_key") or "anchor_score"),
         "max_generalization_gap": float(spec.get("max_generalization_gap", 0.15) or 0.15),
+        "memory_budget_gb": parse_float(spec.get("memory_budget_gb") or maybe_env("TRM_MEMORY_GB")),
         "anchor_set": dict(spec.get("anchor_set", {})),
         "mutations": list(spec.get("mutations") or []),
         "generalization_ladder": list(spec.get("generalization_ladder") or []),
