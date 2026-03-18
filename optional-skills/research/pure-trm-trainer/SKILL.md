@@ -30,6 +30,10 @@ Start from normalized `state/tools/action` records whenever possible. If the sou
 4. Launch Hermes-wrapped training.
    - Canonical runner:
      - `python hermes-skills/storyworld-conveyor/scripts/run_trm_trainer_hermes.py --config hermes-skills/storyworld-conveyor/sample_data/trm_trainer_hermes_safe.json`
+   - Router bench runner:
+     - `python hermes-skills/pure-trm-trainer/scripts/run_trm_routerbench.py`
+     - Add `--dry-run` to resolve the portable bench config without launching.
+     - Add `--template-root <path>` or `--corpus-spec <path>` if your local checkout lives outside the usual `C:/projects` or `/mnt/c/projects` roots.
    - Hill-climb runner:
      - `python hermes-skills/pure-trm-trainer/scripts/run_trm_generalization_hillclimb.py --config <search-spec>.json`
    - Smoke wrapper:
@@ -134,6 +138,8 @@ Supported directly by the corpus builder:
 - Source recipes: [source-patterns.md](./references/source-patterns.md)
 - Hill-climb search spec: [hillclimb-spec.sample.json](./references/hillclimb-spec.sample.json)
 - Hill-climb smoke spec: [hillclimb-spec.smoke.json](./references/hillclimb-spec.smoke.json)
+- Router bench spec: [routerbench-spec.json](./references/routerbench-spec.json)
+- Router bench launcher: [run_trm_routerbench.py](./scripts/run_trm_routerbench.py)
 - Local scorecard evaluator: [evaluate_trm_scorecard.py](./scripts/evaluate_trm_scorecard.py)
 
 ## Example Requests
