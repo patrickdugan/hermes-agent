@@ -37,6 +37,10 @@ Start from normalized `state/tools/action` records whenever possible. If the sou
    - One-click routerBench action:
      - Use this when the user asks to run `trm-routerBench`.
      - This path is isolated from the full trainer pipeline and is the preferred UI prompt flow for bench-only runs.
+   - Watch / tail helper:
+     - `python hermes-skills/pure-trm-trainer/scripts/watch_trm_routerbench.py --run-dir <run_dir>`
+     - Use this to monitor an already-running bench without relaunching it.
+     - Add `--once` for a single snapshot render, or omit it to follow updates.
    - Hill-climb runner:
      - `python hermes-skills/pure-trm-trainer/scripts/run_trm_generalization_hillclimb.py --config <search-spec>.json`
    - Smoke wrapper:
@@ -158,6 +162,7 @@ Supported directly by the corpus builder:
 - Hill-climb smoke spec: [hillclimb-spec.smoke.json](./references/hillclimb-spec.smoke.json)
 - Router bench spec: [routerbench-spec.json](./references/routerbench-spec.json)
 - Router bench launcher: [run_trm_routerbench.py](./scripts/run_trm_routerbench.py)
+- Router bench watcher: [watch_trm_routerbench.py](./scripts/watch_trm_routerbench.py)
 - Router bench UI prompt: use `trm-routerBench` as the action name in Hermes.
 - Local scorecard evaluator: [evaluate_trm_scorecard.py](./scripts/evaluate_trm_scorecard.py)
 - Run telemetry standard: [run-telemetry.md](./references/run-telemetry.md)
