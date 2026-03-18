@@ -34,6 +34,9 @@ Start from normalized `state/tools/action` records whenever possible. If the sou
      - `python hermes-skills/pure-trm-trainer/scripts/run_trm_routerbench.py`
      - Add `--dry-run` to resolve the portable bench config without launching.
      - Add `--template-root <path>` or `--corpus-spec <path>` if your local checkout lives outside the usual `C:/projects` or `/mnt/c/projects` roots.
+   - One-click routerBench action:
+     - Use this when the user asks to run `trm-routerBench`.
+     - This path is isolated from the full trainer pipeline and is the preferred UI prompt flow for bench-only runs.
    - Hill-climb runner:
      - `python hermes-skills/pure-trm-trainer/scripts/run_trm_generalization_hillclimb.py --config <search-spec>.json`
    - Smoke wrapper:
@@ -140,6 +143,7 @@ Supported directly by the corpus builder:
 - Hill-climb smoke spec: [hillclimb-spec.smoke.json](./references/hillclimb-spec.smoke.json)
 - Router bench spec: [routerbench-spec.json](./references/routerbench-spec.json)
 - Router bench launcher: [run_trm_routerbench.py](./scripts/run_trm_routerbench.py)
+- Router bench UI prompt: use `trm-routerBench` as the action name in Hermes.
 - Local scorecard evaluator: [evaluate_trm_scorecard.py](./scripts/evaluate_trm_scorecard.py)
 
 ## Example Requests

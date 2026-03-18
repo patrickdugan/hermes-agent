@@ -1,4 +1,4 @@
 interface:
   display_name: "Pure TRM Trainer"
-  short_description: "Train and tune pure TRM controllers with Hermes"
-  default_prompt: "Use $pure-trm-trainer to assemble TRM data, run Hermes-wrapped training, and hill-climb generalization level against the TRM bench."
+  short_description: "Train, benchmark, and tune pure TRM controllers with Hermes"
+  default_prompt: "Use $pure-trm-trainer to assemble TRM data, run Hermes-wrapped training, or launch trm-routerBench with the isolated router bench launcher. If the user asks for routerBench, use the dedicated router bench runner, not the generic training pipeline."
