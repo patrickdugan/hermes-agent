@@ -43,6 +43,7 @@ Official optional skills live in the repository under `optional-skills/`. Instal
 | Skill | Description | Path |
 |-------|-------------|------|
 | `qmd` | Search personal knowledge bases, notes, docs, and meeting transcripts locally using qmd — a hybrid retrieval engine with BM25, vector search, and LLM reranking. Supports CLI and MCP integration. | `research/qmd` |
+| `pure-trm-trainer` | Build and tune pure TRM controller corpora and Hermes-wrapped trainer runs, including hill-climbing over generalization level with compact scorecard evaluation. | `research/pure-trm-trainer` |
 
 ## security
 
