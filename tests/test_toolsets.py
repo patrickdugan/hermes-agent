@@ -141,3 +141,12 @@ class TestToolsetConsistency:
         # All platform toolsets should be identical
         for ts in tool_sets[1:]:
             assert ts == tool_sets[0]
+
+    def test_hermesjr_toolset_exists_and_is_lean(self):
+        ts = TOOLSETS["hermes-jr"]
+        assert ts["description"].startswith("HermesJr")
+        assert validate_toolset("hermes-jr") is True
+        assert "browser_navigate" not in ts["tools"]
+        assert "vision_analyze" not in ts["tools"]
+        assert "terminal" in ts["tools"]
+        assert "memory" in ts["tools"]

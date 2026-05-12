@@ -26,6 +26,32 @@ model:
   base_url: "https://openrouter.ai/api/v1"
 
 # =============================================================================
+# Profile Selection
+# =============================================================================
+# Set this to "hermesjr" for small-context / MCP-first operation.
+profile: "default"
+
+# HermesJr profile (activated only when profile: "hermesjr")
+# TRM here is strictly additive: it changes execution discipline and MCP use,
+# but keeps Hermes' skill/memory learning loop intact.
+hermesjr:
+  model:
+    context_length: 8192
+    min_context_length: 4096
+  toolsets:
+    - hermes-jr
+  agent:
+    max_turns: 48
+  compression:
+    threshold: 0.35
+  trm:
+    enabled: true
+    mode: "observe-think-act"
+    max_steps: 6
+    summary_every: 2
+    use_mcp: true
+
+# =============================================================================
 # OpenRouter Provider Routing (only applies when using OpenRouter)
 # =============================================================================
 # Control how requests are routed across providers on OpenRouter.

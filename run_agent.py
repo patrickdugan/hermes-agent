@@ -415,6 +415,8 @@ class AIAgent:
         checkpoints_enabled: bool = False,
         checkpoint_max_snapshots: int = 50,
         pass_session_id: bool = False,
+        context_length_override: Optional[int] = None,
+        minimum_context_length: Optional[int] = None,
     ):
         """
         Initialize the AI Agent.
@@ -458,6 +460,8 @@ class AIAgent:
                 When provided and Honcho is enabled in config, enables persistent cross-session user modeling.
             honcho_manager: Optional shared HonchoSessionManager owned by the caller.
             honcho_config: Optional HonchoClientConfig corresponding to honcho_manager.
+            context_length_override (int): Explicit context budget for the active model, if provided.
+            minimum_context_length (int): Floor to preserve when downshifting context after overflow.
         """
         _install_safe_stdio()
 
@@ -852,6 +856,17 @@ class AIAgent:
         except Exception:
             _agent_cfg = {}
 
+        _model_cfg = _agent_cfg.get("model", {})
+        if not isinstance(_model_cfg, dict):
+            _model_cfg = {}
+        if context_length_override is None:
+            context_length_override = _model_cfg.get("context_length")
+        if minimum_context_length is None:
+            minimum_context_length = (
+                _model_cfg.get("min_context_length")
+                or _model_cfg.get("minimum_context_length")
+            )
+
         # Persistent memory (MEMORY.md + USER.md) -- loaded from disk
         self._memory_store = None
         self._memory_enabled = False
@@ -975,6 +990,8 @@ class AIAgent:
             quiet_mode=self.quiet_mode,
             base_url=self.base_url,
             api_key=getattr(self, "api_key", ""),
+            context_length_override=context_length_override,
+            minimum_context_length=minimum_context_length,
         )
         self.compression_enabled = compression_enabled
         self._user_turn_count = 0
@@ -5932,12 +5949,20 @@ class AIAgent:
                         else:
                             # Step down to the next probe tier
                             new_ctx = get_next_probe_tier(old_ctx)
+                            if new_ctx is None:
+                                min_floor = getattr(compressor, "minimum_context_length", 0) or 0
+                                if min_floor and min_floor < old_ctx:
+                                    new_ctx = min_floor
+                                elif old_ctx > 1024:
+                                    new_ctx = max(old_ctx // 2, 1024)
 
                         if new_ctx and new_ctx < old_ctx:
-                            compressor.context_length = new_ctx
-                            compressor.threshold_tokens = int(new_ctx * compressor.threshold_percent)
-                            compressor._context_probed = True
-                            self._vprint(f"{self.log_prefix}⚠️  Context length exceeded — stepping down: {old_ctx:,} → {new_ctx:,} tokens", force=True)
+                            applied_ctx = compressor.set_context_length(new_ctx)
+                            if applied_ctx < old_ctx:
+                                compressor._context_probed = True
+                                self._vprint(f"{self.log_prefix}⚠️  Context length exceeded — stepping down: {old_ctx:,} → {applied_ctx:,} tokens", force=True)
+                            else:
+                                self._vprint(f"{self.log_prefix}⚠️  Context length exceeded at minimum tier — attempting compression...", force=True)
                         else:
                             self._vprint(f"{self.log_prefix}⚠️  Context length exceeded at minimum tier — attempting compression...", force=True)
 

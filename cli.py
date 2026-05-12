@@ -155,6 +155,7 @@ def load_cli_config() -> Dict[str, Any]:
 
     # Default configuration
     defaults = {
+        "profile": "default",
         "model": {
             "default": "anthropic/claude-opus-4.6",
             "base_url": OPENROUTER_BASE_URL,
@@ -249,6 +250,38 @@ def load_cli_config() -> Dict[str, Any]:
             "base_url": "",    # Direct OpenAI-compatible endpoint for subagents
             "api_key": "",     # API key for delegation.base_url (falls back to OPENAI_API_KEY)
         },
+        "mcp_servers": {},
+            "hermesjr": {
+                "model": {
+                    "context_length": 8192,
+                    "min_context_length": 4096,
+                },
+                "toolsets": ["hermes-jr"],
+                "agent": {
+                    "max_turns": 48,
+                    "system_prompt": (
+                        "You are HermesJr: a small-context, MCP-first agent. "
+                        "TRM is a strictly additive execution discipline, not a replacement "
+                        "for Hermes' skill and memory learning loop. "
+                        "Prefer short Observe -> Think -> Act cycles, externalize state "
+                        "through tools, and treat the conversation window as a scarce "
+                        "resource. Keep intermediate reasoning compact. Use MCP tools "
+                        "for long-lived state, retrieval, and structured workflows "
+                        "instead of relying on long prompt history."
+                ),
+            },
+            "compression": {
+                "enabled": True,
+                "threshold": 0.35,
+            },
+            "trm": {
+                "enabled": True,
+                "mode": "observe-think-act",
+                "max_steps": 6,
+                "summary_every": 2,
+                "use_mcp": True,
+            },
+        },
     }
     
     # Track whether the config file explicitly set terminal config.
@@ -267,29 +300,13 @@ def load_cli_config() -> Dict[str, Any]:
 
             # Handle model config - can be string (new format) or dict (old format)
             if "model" in file_config:
+                file_config = dict(file_config)
                 if isinstance(file_config["model"], str):
                     # New format: model is just a string, convert to dict structure
-                    defaults["model"]["default"] = file_config["model"]
+                    file_config["model"] = {"default": file_config["model"]}
                 elif isinstance(file_config["model"], dict):
-                    # Old format: model is a dict with default/base_url
-                    defaults["model"].update(file_config["model"])
-            
-            # Deep merge file_config into defaults.
-            # First: merge keys that exist in both (deep-merge dicts, overwrite scalars)
-            for key in defaults:
-                if key == "model":
-                    continue  # Already handled above
-                if key in file_config:
-                    if isinstance(defaults[key], dict) and isinstance(file_config[key], dict):
-                        defaults[key].update(file_config[key])
-                    else:
-                        defaults[key] = file_config[key]
-            
-            # Second: carry over keys from file_config that aren't in defaults
-            # (e.g. platform_toolsets, provider_routing, memory, honcho, etc.)
-            for key in file_config:
-                if key not in defaults and key != "model":
-                    defaults[key] = file_config[key]
+                    # Old format: keep as-is; the deep merge below preserves nested keys
+                    pass
             
             # Handle legacy root-level max_turns (backwards compat) - copy to
             # agent.max_turns whenever the nested key is missing.
@@ -298,7 +315,14 @@ def load_cli_config() -> Dict[str, Any]:
                 isinstance(agent_file_config, dict)
                 and agent_file_config.get("max_turns") is not None
             ):
-                defaults["agent"]["max_turns"] = file_config["max_turns"]
+                file_config = dict(file_config)
+                agent_file_config = dict(agent_file_config or {})
+                agent_file_config["max_turns"] = file_config["max_turns"]
+                file_config["agent"] = agent_file_config
+                file_config.pop("max_turns", None)
+
+            from hermes_cli.config import _merge_active_profile
+            defaults = _merge_active_profile(defaults, file_config)
         except Exception as e:
             logger.warning("Failed to load cli-config.yaml: %s", e)
     
@@ -1017,6 +1041,8 @@ class HermesCLI:
         # Initialize Rich console
         self.console = Console()
         self.config = CLI_CONFIG
+        self.profile = str(CLI_CONFIG.get("profile", "default") or "default").strip() or "default"
+        self.profile_config = CLI_CONFIG.get(self.profile, {}) if self.profile != "default" else {}
         self.compact = compact if compact is not None else CLI_CONFIG["display"].get("compact", False)
         # tool_progress: "off", "new", "all", "verbose" (from config.yaml display section)
         self.tool_progress_mode = CLI_CONFIG["display"].get("tool_progress", "all")
@@ -1814,6 +1840,9 @@ class HermesCLI:
                 "args": list(self.acp_args or []),
             }
             effective_model = model_override or self.model
+            profile_model_cfg = self.profile_config.get("model", {}) if isinstance(self.profile_config, dict) else {}
+            if not isinstance(profile_model_cfg, dict):
+                profile_model_cfg = {}
             self.agent = AIAgent(
                 model=effective_model,
                 api_key=runtime.get("api_key"),
@@ -1852,6 +1881,8 @@ class HermesCLI:
                 pass_session_id=self.pass_session_id,
                 tool_progress_callback=self._on_tool_progress,
                 stream_delta_callback=self._stream_delta if self.streaming_enabled else None,
+                context_length_override=profile_model_cfg.get("context_length"),
+                minimum_context_length=profile_model_cfg.get("min_context_length"),
             )
             self._active_agent_route_signature = (
                 effective_model,
@@ -3780,6 +3811,9 @@ class HermesCLI:
         _cprint(f"  You can continue chatting — results will appear when done.\n")
 
         turn_route = self._resolve_turn_agent_config(prompt)
+        profile_model_cfg = self.profile_config.get("model", {}) if isinstance(self.profile_config, dict) else {}
+        if not isinstance(profile_model_cfg, dict):
+            profile_model_cfg = {}
 
         def run_background():
             try:
@@ -3806,6 +3840,8 @@ class HermesCLI:
                     provider_require_parameters=self._provider_require_params,
                     provider_data_collection=self._provider_data_collection,
                     fallback_model=self._fallback_model,
+                    context_length_override=profile_model_cfg.get("context_length"),
+                    minimum_context_length=profile_model_cfg.get("min_context_length"),
                 )
 
                 result = bg_agent.run_conversation(

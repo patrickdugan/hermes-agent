@@ -49,6 +49,26 @@ class TestShouldCompressPreflight:
         assert compressor.should_compress_preflight(msgs) is True
 
 
+class TestContextLengthOverride:
+    def test_override_and_floor_are_respected(self):
+        with patch("agent.context_compressor.get_model_context_length", side_effect=AssertionError("should not probe")):
+            c = ContextCompressor(
+                model="test/model",
+                threshold_percent=0.5,
+                quiet_mode=True,
+                context_length_override=8192,
+                minimum_context_length=4096,
+            )
+
+        assert c.context_length == 8192
+        assert c.threshold_tokens == 4096
+
+        applied = c.set_context_length(1024)
+        assert applied == 4096
+        assert c.context_length == 4096
+        assert c.threshold_tokens == 2048
+
+
 class TestUpdateFromResponse:
     def test_updates_fields(self, compressor):
         compressor.update_from_response({

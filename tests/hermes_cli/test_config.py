@@ -77,6 +77,48 @@ class TestLoadConfigDefaults:
             assert config["agent"]["max_turns"] == 42
             assert "max_turns" not in config
 
+    def test_hermesjr_profile_merges_active_profile_block(self, tmp_path):
+        with patch.dict(os.environ, {"HERMES_HOME": str(tmp_path)}):
+            config_path = tmp_path / "config.yaml"
+            config_path.write_text(
+                "profile: hermesjr\n"
+                "hermesjr:\n"
+                "  model:\n"
+                "    context_length: 8192\n"
+                "    min_context_length: 4096\n"
+                "  toolsets:\n"
+                "    - hermes-jr\n"
+                "  agent:\n"
+                "    max_turns: 48\n"
+                "  trm:\n"
+                "    enabled: true\n"
+            )
+
+            config = load_config()
+            assert config["profile"] == "hermesjr"
+            assert config["model"]["context_length"] == 8192
+            assert config["model"]["min_context_length"] == 4096
+            assert config["toolsets"] == ["hermes-jr"]
+            assert config["agent"]["max_turns"] == 48
+            assert config["trm"]["enabled"] is True
+
+    def test_root_override_wins_over_profile_block(self, tmp_path):
+        with patch.dict(os.environ, {"HERMES_HOME": str(tmp_path)}):
+            config_path = tmp_path / "config.yaml"
+            config_path.write_text(
+                "profile: hermesjr\n"
+                "model:\n"
+                "  context_length: 12288\n"
+                "hermesjr:\n"
+                "  model:\n"
+                "    context_length: 8192\n"
+                "    min_context_length: 4096\n"
+            )
+
+            config = load_config()
+            assert config["model"]["context_length"] == 12288
+            assert config["model"]["min_context_length"] == 4096
+
 
 class TestSaveAndLoadRoundtrip:
     def test_roundtrip(self, tmp_path):

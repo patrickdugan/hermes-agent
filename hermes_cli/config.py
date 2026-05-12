@@ -109,6 +109,7 @@ def ensure_hermes_home():
 # =============================================================================
 
 DEFAULT_CONFIG = {
+    "profile": "default",
     "model": "anthropic/claude-opus-4.6",
     "toolsets": ["hermes-cli"],
     "agent": {
@@ -300,6 +301,10 @@ DEFAULT_CONFIG = {
         "user_char_limit": 1375,     # ~500 tokens at 2.75 chars/token
     },
 
+    # MCP servers discovered at startup.  Empty by default; profile blocks can
+    # provide a dedicated MCP stack (for example, HermesJr's TRM servers).
+    "mcp_servers": {},
+
     # Subagent delegation — override the provider:model used by delegate_task
     # so child agents can run on a different (cheaper/faster) provider and model.
     # Uses the same runtime provider resolution as CLI/gateway startup, so all
@@ -320,6 +325,43 @@ DEFAULT_CONFIG = {
     # This section is only needed for hermes-specific overrides; everything else
     # (apiKey, workspace, peerName, sessions, enabled) comes from the global config.
     "honcho": {},
+
+    # HermesJr profile — small-context, MCP-first, TRM-guided execution addendum.
+    # This is strictly additive: it changes how the agent uses context/tools,
+    # but it does not replace Hermes' existing skill + memory learning loop.
+    # Select with `profile: hermesjr`.  Root-level user overrides still win.
+    "hermesjr": {
+        "model": {
+            "context_length": 8192,
+            "min_context_length": 4096,
+        },
+        "toolsets": ["hermes-jr"],
+        "agent": {
+            "max_turns": 48,
+            "system_prompt": (
+                "You are HermesJr: a small-context, MCP-first agent. "
+                "TRM is a strictly additive execution discipline, not a replacement "
+                "for Hermes' skill and memory learning loop. "
+                "Prefer short Observe -> Think -> Act cycles, externalize state "
+                "through tools, and treat the conversation window as a scarce "
+                "resource. Keep intermediate reasoning compact. Use MCP tools "
+                "for long-lived state, retrieval, and structured workflows "
+                "instead of relying on long prompt history."
+            ),
+        },
+        "compression": {
+            "enabled": True,
+            "threshold": 0.35,
+        },
+        "mcp_servers": {},
+        "trm": {
+            "enabled": True,
+            "mode": "observe-think-act",
+            "max_steps": 6,
+            "summary_every": 2,
+            "use_mcp": True,
+        },
+    },
 
     # IANA timezone (e.g. "Asia/Kolkata", "America/New_York").
     # Empty string means use server-local time.
@@ -372,7 +414,7 @@ DEFAULT_CONFIG = {
     },
 
     # Config schema version - bump this when adding new required fields
-    "_config_version": 10,
+    "_config_version": 11,
 }
 
 # =============================================================================
@@ -1161,6 +1203,33 @@ def _normalize_max_turns_config(config: Dict[str, Any]) -> Dict[str, Any]:
     return config
 
 
+def _normalize_profile_name(value: Any) -> str:
+    """Normalize the profile selector to a canonical string."""
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return "default"
+
+
+def _merge_active_profile(defaults: Dict[str, Any], user_config: Dict[str, Any]) -> Dict[str, Any]:
+    """Merge config defaults, then the active profile block, then user overrides.
+
+    This keeps profile-specific defaults available without preventing explicit
+    root-level user settings from winning.
+    """
+    merged = _deep_merge({}, defaults)
+    profile_name = _normalize_profile_name(user_config.get("profile", merged.get("profile", "default")))
+    if profile_name != "default":
+        default_profile_cfg = defaults.get(profile_name)
+        if isinstance(default_profile_cfg, dict):
+            merged = _deep_merge(merged, default_profile_cfg)
+        profile_cfg = user_config.get(profile_name)
+        if isinstance(profile_cfg, dict):
+            merged = _deep_merge(merged, profile_cfg)
+    merged = _deep_merge(merged, user_config)
+    merged["profile"] = profile_name
+    return merged
+
+
 
 def load_config() -> Dict[str, Any]:
     """Load configuration from ~/.hermes/config.yaml."""
@@ -1182,7 +1251,7 @@ def load_config() -> Dict[str, Any]:
                 user_config["agent"] = agent_user_config
                 user_config.pop("max_turns", None)
 
-            config = _deep_merge(config, user_config)
+            config = _merge_active_profile(config, user_config)
         except Exception as e:
             print(f"Warning: Failed to load config: {e}")
     
@@ -1579,9 +1648,32 @@ def show_config():
     # Model settings
     print()
     print(color("◆ Model", Colors.CYAN, Colors.BOLD))
+    active_profile = _normalize_profile_name(config.get("profile", "default"))
+    print(f"  Profile:      {active_profile}")
     print(f"  Model:        {config.get('model', 'not set')}")
     print(f"  Max turns:    {config.get('agent', {}).get('max_turns', DEFAULT_CONFIG['agent']['max_turns'])}")
     print(f"  Toolsets:     {', '.join(config.get('toolsets', ['all']))}")
+
+    if active_profile != "default":
+        profile_cfg = config.get(active_profile, {})
+        if isinstance(profile_cfg, dict):
+            profile_model = profile_cfg.get("model", {})
+            if not isinstance(profile_model, dict):
+                profile_model = {}
+            jr_ctx = profile_model.get("context_length")
+            jr_floor = profile_model.get("min_context_length")
+            trm_cfg = profile_cfg.get("trm", {})
+            if not isinstance(trm_cfg, dict):
+                trm_cfg = {}
+            jr_toolsets = profile_cfg.get("toolsets", [])
+            if jr_toolsets:
+                print(f"  Active cfg:   {active_profile} (toolsets={', '.join(jr_toolsets)})")
+            else:
+                print(f"  Active cfg:   {active_profile}")
+            if jr_ctx or jr_floor:
+                print(f"  Context:      {jr_ctx or '(default)'} / floor {jr_floor or '(default)'}")
+            if trm_cfg:
+                print(f"  TRM mode:     {trm_cfg.get('mode', 'off')} (enabled={trm_cfg.get('enabled', False)})")
     
     # Display
     print()

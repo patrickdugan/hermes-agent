@@ -60,6 +60,8 @@ hermes update       # Update to the latest version
 hermes doctor       # Diagnose any issues
 ```
 
+To switch into the small-context MCP-first profile, set `profile: hermesjr` in `~/.hermes/config.yaml`. That profile uses the `hermes-jr` toolset and an 8K context budget with a 4K floor. TRM is strictly additive here: it changes execution cadence and tool use, but Hermes still learns through skills and memory.
+
 📖 **[Full documentation →](https://hermes-agent.nousresearch.com/docs/)**
 
 ## CLI vs Messaging Quick Reference

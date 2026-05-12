@@ -3158,6 +3158,7 @@ class GatewayRunner:
                 Platform.DINGTALK: "hermes-dingtalk",
             }
             platform_toolsets_config = {}
+            active_profile_toolsets = None
             try:
                 config_path = _hermes_home / 'config.yaml'
                 if config_path.exists():
@@ -3165,6 +3166,12 @@ class GatewayRunner:
                     with open(config_path, 'r', encoding="utf-8") as f:
                         user_config = yaml.safe_load(f) or {}
                     platform_toolsets_config = user_config.get("platform_toolsets", {})
+                from hermes_cli.config import load_config as _load_hermes_config
+                _active_cfg = _load_hermes_config()
+                if str(_active_cfg.get("profile", "default") or "default") != "default":
+                    _profile_toolsets = _active_cfg.get("toolsets")
+                    if isinstance(_profile_toolsets, list):
+                        active_profile_toolsets = [ts for ts in _profile_toolsets if isinstance(ts, str) and ts.strip()]
             except Exception:
                 pass
 
@@ -3183,6 +3190,8 @@ class GatewayRunner:
             config_toolsets = platform_toolsets_config.get(platform_config_key)
             if config_toolsets and isinstance(config_toolsets, list):
                 enabled_toolsets = config_toolsets
+            elif active_profile_toolsets:
+                enabled_toolsets = active_profile_toolsets
             else:
                 default_toolset = default_toolset_map.get(source.platform, "hermes-telegram")
                 enabled_toolsets = [default_toolset]
@@ -4195,6 +4204,7 @@ class GatewayRunner:
 
         # Try to load platform_toolsets from config
         platform_toolsets_config = {}
+        active_profile_toolsets = None
         try:
             config_path = _hermes_home / 'config.yaml'
             if config_path.exists():
@@ -4202,6 +4212,12 @@ class GatewayRunner:
                 with open(config_path, 'r', encoding="utf-8") as f:
                     user_config = yaml.safe_load(f) or {}
                 platform_toolsets_config = user_config.get("platform_toolsets", {})
+            from hermes_cli.config import load_config as _load_hermes_config
+            _active_cfg = _load_hermes_config()
+            if str(_active_cfg.get("profile", "default") or "default") != "default":
+                _profile_toolsets = _active_cfg.get("toolsets")
+                if isinstance(_profile_toolsets, list):
+                    active_profile_toolsets = [ts for ts in _profile_toolsets if isinstance(ts, str) and ts.strip()]
         except Exception as e:
             logger.debug("Could not load platform_toolsets config: %s", e)
 
@@ -4222,6 +4238,8 @@ class GatewayRunner:
         config_toolsets = platform_toolsets_config.get(platform_config_key)
         if config_toolsets and isinstance(config_toolsets, list):
             enabled_toolsets = config_toolsets
+        elif active_profile_toolsets:
+            enabled_toolsets = active_profile_toolsets
         else:
             default_toolset = default_toolset_map.get(source.platform, "hermes-telegram")
             enabled_toolsets = [default_toolset]

@@ -66,6 +66,23 @@ _HERMES_CORE_TOOLS = [
     "ha_list_entities", "ha_get_state", "ha_list_services", "ha_call_service",
 ]
 
+_HERMES_JR_TOOLS = [
+    # Web
+    "web_search", "web_extract",
+    # Terminal + process management
+    "terminal", "process",
+    # File manipulation
+    "read_file", "write_file", "patch", "search_files",
+    # Skills
+    "skills_list", "skill_view", "skill_manage",
+    # Planning, memory, and session retrieval
+    "todo", "memory", "session_search",
+    # Clarifying questions
+    "clarify",
+    # Code execution + delegation
+    "execute_code", "delegate_task",
+]
+
 
 # Core toolset definitions
 # These can include individual tools or reference other toolsets
@@ -253,6 +270,12 @@ TOOLSETS = {
     "hermes-cli": {
         "description": "Full interactive CLI toolset - all default tools plus cronjob management",
         "tools": _HERMES_CORE_TOOLS,
+        "includes": []
+    },
+
+    "hermes-jr": {
+        "description": "HermesJr small-context MCP-first profile with a lean tool surface",
+        "tools": _HERMES_JR_TOOLS,
         "includes": []
     },
     

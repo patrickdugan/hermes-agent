@@ -46,6 +46,8 @@ class ContextCompressor:
         summary_model_override: str = None,
         base_url: str = "",
         api_key: str = "",
+        context_length_override: Optional[int] = None,
+        minimum_context_length: Optional[int] = None,
     ):
         self.model = model
         self.base_url = base_url
@@ -55,8 +57,14 @@ class ContextCompressor:
         self.protect_last_n = protect_last_n
         self.summary_target_tokens = summary_target_tokens
         self.quiet_mode = quiet_mode
+        self.minimum_context_length = int(minimum_context_length or 0) if minimum_context_length else 0
 
-        self.context_length = get_model_context_length(model, base_url=base_url, api_key=api_key)
+        if context_length_override is not None:
+            self.context_length = int(context_length_override)
+        else:
+            self.context_length = get_model_context_length(model, base_url=base_url, api_key=api_key)
+        if self.minimum_context_length and self.context_length < self.minimum_context_length:
+            self.context_length = self.minimum_context_length
         self.threshold_tokens = int(self.context_length * threshold_percent)
         self.compression_count = 0
         self._context_probed = False  # True after a step-down from context error
@@ -66,6 +74,17 @@ class ContextCompressor:
         self.last_total_tokens = 0
 
         self.summary_model = summary_model_override or ""
+
+    def set_context_length(self, new_length: int) -> int:
+        """Update the active context length, respecting the configured floor."""
+        if new_length is None:
+            return self.context_length
+        applied = int(new_length)
+        if self.minimum_context_length and applied < self.minimum_context_length:
+            applied = self.minimum_context_length
+        self.context_length = applied
+        self.threshold_tokens = int(self.context_length * self.threshold_percent)
+        return self.context_length
 
     def update_from_response(self, usage: Dict[str, Any]):
         """Update tracked token usage from API response."""
